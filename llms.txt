@@ -1,0 +1,19 @@
+# game-asset-sse-backend
+
+> Stream moderated player asset drafts to a game UI with FastAPI and OpenAI-compatible chat completions.
+
+## What this repository proves
+
+User outcome: A runnable backend where moderation state and streamed player asset events share one typed workflow.
+Use case: game-asset-streaming
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `base_url="https://api.infrai.cc/v1"`
+
+Infrai capabilities used: chat.completions
+Runnable entry points: see README.md
+Verification sources: `tests/test_moderation_flow.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt

@@ -1,0 +1,1 @@
+"""Game backend streaming example."""
