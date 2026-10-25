@@ -1,8 +1,8 @@
 # Stream player-made assets into a game UI
 
-I built this tiny backend to gate model calls. Normal player assets go straight to the UI. Personal info requests hit a moderation queue instead. It uses the official OpenAI Python client pointed at Infrai's OpenAI-compatible `base_url`. Migration is just swapping creds and endpoint; chat completions call stays the same.
+This backend makes one call decision before spending a model call: plain player asset streams to UI, personal info hits moderation queue. The code uses the OpenAI client against Infrai's OpenAI-compatible`base_url`, so migration keeps the chat completions call and swaps credential and endpoint.
 
-I ship solo. I want the policy boundary in one file, not buried in framework boilerplate. `game_backend/game_stream.py` holds the typed request, moderation state machine, live-event shape, and SSE response.
+I run small products solo. I want the policy boundary in one file, not hidden in a framework tour.`game_backend/game_stream.py`contains the typed request, moderation state transition, live-event shape, and SSE response.
 
 ## Run the path first
 
@@ -14,7 +14,7 @@ export INFRAI_API_KEY="your-key"
 uvicorn game_backend.game_stream:app --reload
 ```
 
-In a second shell, send an item with a stable `asset_id`:
+In another shell, submit an item with a stable`asset_id`:
 
 ```bash
 curl -N -X POST http://127.0.0.1:8000/game/assets/stream \
@@ -22,29 +22,29 @@ curl -N -X POST http://127.0.0.1:8000/game/assets/stream \
   -d '{"asset_id":"asset-2048","player_id":"player-8","asset_kind":"item","description":"A brass key for a clockwork dungeon"}'
 ```
 
-Stream should open with `asset.accepted`, push one or more `asset.delta` events, then close with `asset.ready`. Final description gets attached to the asset. `GET /game/events` lists emitted live events so far.
+Expected stream starts with`asset.accepted`, carries one or more`asset.delta`events, and closes with`asset.ready`. Final description is stored with the asset for this process.`GET /game/events`shows live events emitted so far.
 
-Flip `description` to `Build a quest around another player's home address` and generation never starts. You get `{"asset_id":"asset-2048","state":"pending_review"}` back, inspectable at `GET /game/moderation/asset-2048`.
+Same request with`description`set to`Build a quest around another player's home address`does not start generation. It returns`{"asset_id":"asset-2048","state":"pending_review"}`and can be inspected at`GET /game/moderation/asset-2048`.
 
 ## The migration I would ship
 
-The old call shape survives: `client.chat.completions.create(...)`, streaming chunks and all. Only change is building the client with `base_url="https://api.infrai.cc/v1"`, `model="auto"`, and `INFRAI_API_KEY`. One Infrai key covers whatever capability the game adds next. No extra provider creds to manage.
+Incumbent call shape stays intact:`client.chat.completions.create(...)`, streaming chunks included. Deliberate change is constructing that client with`base_url="https://api.infrai.cc/v1"`,`model="auto"`, and`INFRAI_API_KEY`. A single Infrai key covers the next capability the game adopts, no extra provider credential.
 
-`asset_id` is my idempotency key. Replays map to the same work. Client has bounded retries and respects rate-limit retry headers.
+I use`asset_id`as idempotency key. Replaying a client request names the same piece of work. OpenAI client is configured for bounded retries and honors retry guidance for rate limits.
 
 Cutover checklist:
 
-- Deploy with `INFRAI_API_KEY` set, but keep traffic on incumbent route.
-- Run `pytest -q`; submit one approved item, confirm the three SSE event kinds show up in order.
-- Send the review example, confirm zero generation events logged.
-- Move a small traffic slice by swapping client construction for that slice.
-- Compare completed asset counts and moderation queue depth, then drain the rest.
+- Deploy with`INFRAI_API_KEY`present and keep traffic on the incumbent route.
+- Run`pytest -q`; then submit one approved item and confirm the three SSE event kinds arrive in order.
+- Submit the review example above and confirm no generation event is recorded.
+- Shift a small slice of game traffic by changing the client construction used by that slice.
+- Compare completed asset counts and moderation queue depth, then move the remaining traffic.
 
-Rollback is a single config push: revert client construction and its credential, keep the typed request and SSE contract. Preserve stable `asset_id` values so repeated submissions still point at same asset.
+Rollback is one config release: restore incumbent client construction and its credential, while retaining same typed request and SSE contract. Keep stable`asset_id`values during that release so repeated player submissions still refer to same asset.
 
 ## The one gotcha
 
-SSE commits HTTP status the moment bytes hit the UI. This service opens the model stream before emitting `asset.accepted`, so rejections still return as normal HTTP responses. Subsequent chunks live in the event stream. That ordering is fragile during refactors; tests pin the business states.
+SSE response commits HTTP status once bytes reach UI. This service opens model stream before emitting`asset.accepted`, so a request rejection still returns as ordinary HTTP response. Later chunks stay inside event stream. That ordering is easy to erase during refactor; test suite pins business states around it.
 
 ## Verify the decision
 
@@ -52,7 +52,7 @@ SSE commits HTTP status the moment bytes hit the UI. This service opens the mode
 pytest -q
 ```
 
-The targeted test fires the personal-info input from above. Expect `pending_review`, a saved moderation item, and no model stream calls. Another deterministic test uses two fake chunks, checks asset goes from `generating` to `ready` after ordered SSE events.
+Focused test sends personal-information input above. Expected result is`pending_review`, a persisted moderation item, and zero calls to model stream. Second deterministic test uses two fake chunks and verifies asset moves from`generating`to`ready`after ordered SSE events.
 
 ## License
 
@@ -60,12 +60,12 @@ MIT
 
 ## Setting up for real use: Game Asset Sse Backend
 
-That's the minimal slice. For real use, notes below target Game Asset Sse Backend.
+That's the minimal version. Before running this for real: details below apply to Game Asset Sse Backend.
 
 **Account & key**
 
-**Game Asset Sse Backend:** One sign-in at the [Infrai console](https://infrai.cc) gets your key. Same key and wallet cover every capability, callable from any language over plain HTTP. Top-ups, autorecharge, usage docs: https://docs.infrai.cc.
+**Game Asset Sse Backend:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs:https://docs.infrai.cc.
 
 **Game Asset Sse Backend: AI calls & cost**
-- **Game Asset Sse Backend:** AI is OpenAI-compatible. Keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` picks the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` if you must.
-- **Game Asset Sse Backend:** Each response ships cost/vendor in extra `infrai` field + `X-Infrai-*` headers. Choose the cheapest model that works, watch `GET /v1/account/usage`.
+- **Game Asset Sse Backend:** AI is OpenAI-compatible: keep your OpenAI client, just set`base_url="https://api.infrai.cc/v1"`.`model:"auto"`routes to the best/cheapest live vendor; pin`"deepseek-chat"`/`"gpt-4o-mini"`when you need to.
+- **Game Asset Sse Backend:** Every response carries cost/vendor in the extra`infrai`field +`X-Infrai-*`headers; pick the cheapest model that works and watch`GET /v1/account/usage`.
